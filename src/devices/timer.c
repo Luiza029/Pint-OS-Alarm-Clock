@@ -36,9 +36,9 @@ static void real_time_delay (int64_t num, int32_t denom);
 void
 timer_init (void) 
 {
+  list_init(&sleeping_list);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-  list_init(&sleeping_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -93,9 +93,8 @@ timer_sleep (int64_t ticks)
 {
   int64_t start = timer_ticks ();
 
-  enum intr_level old_leval = intr_disable();
-
   ASSERT (intr_get_level () == INTR_ON);
+  enum intr_level old_leval = intr_disable();
   thread_current ()-> wakeup_tick = start + ticks;
   list_push_back (&sleeping_list, &thread_current()-> elem);
   thread_block();
@@ -178,6 +177,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+
+  struct list_elem *tarefa = list_begin(&sleeping_list);
+  
+  while(tarefa != list_end(&sleeping_list)){
+    struct thread *t = list_entry(tarefa, struct thread, elem);        
+    if(ticks >= t->wakeup_tick){
+      tarefa = list_remove(tarefa);  
+      thread_unblock(t);
+    } 
+
+    else{
+      tarefa = list_next(tarefa);
+    } 
+
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
